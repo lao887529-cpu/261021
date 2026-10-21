@@ -333,7 +333,7 @@ def clean_dataframe(df):
 def create_excel_file(complete_df, incomplete_df, summary_df):
     """
     建立包含三個 Sheet 的 Excel 檔案，回傳 bytes。
-    已修正空資料或空欄位造成的 TypeError。
+    已修正 pandas Arrow 字串與 NaN 造成的 TypeError。
     """
     import io
     from pandas import ExcelWriter
@@ -369,27 +369,31 @@ def create_excel_file(complete_df, incomplete_df, summary_df):
 
             for column_num, column_name in enumerate(sheet_df.columns):
 
-                # 防止空 DataFrame 或空欄位造成 NaN
-                if len(sheet_df) == 0:
-                    max_length = len(str(column_name))
-                else:
-                    text_lengths = (
+                # 預設欄寬：欄位名稱長度
+                max_length = len(str(column_name))
+
+                if len(sheet_df) > 0:
+
+                    # 先把 NaN 轉為空字串，避免 .map(len) 出錯
+                    text_series = (
                         sheet_df[column_name]
+                        .fillna("")
                         .astype(str)
-                        .map(len)
                     )
 
-                    if text_lengths.empty:
-                        max_length = len(str(column_name))
-                    else:
-                        max_length = int(text_lengths.max())
+                    # 使用 .str.len()，比 .map(len) 更相容
+                    text_lengths = text_series.str.len()
 
-                column_width = max(
-                    max_length,
-                    len(str(column_name))
-                ) + 2
+                    if not text_lengths.empty:
+                        longest = text_lengths.max()
 
-                column_width = min(column_width, 60)
+                        if pd.notna(longest):
+                            max_length = max(
+                                max_length,
+                                int(longest)
+                            )
+
+                column_width = min(max_length + 2, 60)
 
                 worksheet.set_column(
                     column_num,
